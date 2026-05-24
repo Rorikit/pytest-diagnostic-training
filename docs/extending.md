@@ -5,8 +5,8 @@
 Правило наследуется от `DiagnosticRule` и реализует `match`.
 
 ```python
-from pytest_diagnostics.diagnostics.models import DiagnosticFinding
-from pytest_diagnostics.rules.base import DiagnosticRule
+from pytest_diagnostics.diagnostics.models import DiagnosticEvidence, DiagnosticFinding
+from pytest_diagnostics.rules.base import DiagnosticRule, confidence_from
 from pytest_diagnostics.signals.models import DiagnosticSignal
 
 
@@ -21,14 +21,16 @@ class CacheSignalRule(DiagnosticRule):
         if not has_cache_step:
             return None
 
+        evidence = [DiagnosticEvidence("Обнаружен cache-related шаг", 0.55)]
         return DiagnosticFinding(
             area="Cache",
-            title="Cache-related signal detected",
-            explanation="Runtime signals mention cache.",
-            confidence=0.55,
-            facts=["cache-related step detected"],
-            assumptions=["stale data may be involved"],
-            recommended_checks=["inspect cache invalidation and timestamps"],
+            title="Обнаружен cache-related сигнал",
+            explanation="Runtime-сигналы упоминают cache.",
+            confidence=confidence_from(evidence),
+            facts=["обнаружен cache-related шаг"],
+            assumptions=["в проверке могли участвовать устаревшие данные"],
+            recommended_checks=["проверить cache invalidation и timestamps"],
+            evidence=evidence,
             rule_name=self.name,
         )
 ```
@@ -61,8 +63,11 @@ runtime = DiagnosticRuntime(
 `pytest_diagnostics/integrations/allure_steps.py` оборачивает публичный
 `allure.step()`. Из названия шага извлекаются semantic tags и HTTP status.
 
-Если нужен новый тип шага, расширьте `StepSemanticExtractor`, а правило пусть
+Если нужен новый тип шага, расширьте `StepSemanticAnalyzer` и/или patterns, а правило пусть
 матчит соответствующие `DiagnosticSignal`.
+
+В текущей архитектуре semantic analyzer находится в
+`pytest_diagnostics/steps/semantics.py`.
 
 ## Принципы
 

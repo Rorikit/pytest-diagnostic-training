@@ -1,7 +1,7 @@
 from __future__ import annotations
 
-from pytest_diagnostics.diagnostics.models import DiagnosticFinding
-from pytest_diagnostics.rules.base import DiagnosticRule, signal_text
+from pytest_diagnostics.diagnostics.models import DiagnosticEvidence, DiagnosticFinding
+from pytest_diagnostics.rules.base import DiagnosticRule, confidence_from, matching_signal, signal_text
 from pytest_diagnostics.signals.models import DiagnosticSignal
 
 
@@ -10,23 +10,31 @@ class TimeoutRule(DiagnosticRule):
 
     def match(self, signals: list[DiagnosticSignal]) -> DiagnosticFinding | None:
         text = _combined_text(signals)
-        if "timeout" not in text and "timed out" not in text:
+        timeout_step = matching_signal(signals, "step_kind", "timeout")
+        text_match = "timeout" in text or "timed out" in text
+        if timeout_step is None and not text_match:
             return None
+        evidence = []
+        if timeout_step is not None:
+            evidence.append(DiagnosticEvidence("Обнаружен шаг типа timeout", 0.45, timeout_step))
+        if text_match:
+            evidence.append(DiagnosticEvidence("Обнаружен текстовый timeout-сигнал", 0.60, None))
         return DiagnosticFinding(
-            area="Timeout/service availability",
-            title="Timeout signal detected",
-            explanation="Runtime signals contain timeout wording.",
-            confidence=0.6,
-            facts=["timeout signal detected"],
+            area="Timeout/доступность сервиса",
+            title="Обнаружен timeout-сигнал",
+            explanation="Runtime-сигналы содержат timeout wording.",
+            confidence=confidence_from(evidence),
+            facts=["обнаружен timeout-сигнал"],
             assumptions=[
-                "service responded too slowly",
-                "network/environment issue",
+                "сервис отвечает слишком медленно",
+                "возможна проблема сети или окружения",
             ],
             recommended_checks=[
-                "inspect service latency",
-                "check timeout configuration",
-                "verify environment health",
+                "проверить latency сервиса",
+                "проверить timeout-конфигурацию",
+                "проверить состояние окружения",
             ],
+            evidence=evidence,
             rule_name=self.name,
         )
 
@@ -36,23 +44,31 @@ class ConnectionRule(DiagnosticRule):
 
     def match(self, signals: list[DiagnosticSignal]) -> DiagnosticFinding | None:
         text = _combined_text(signals)
-        if "connection" not in text and "connect" not in text and "redis" not in text:
+        dependency = matching_signal(signals, "step_kind", "dependency")
+        text_match = "connection" in text or "connect" in text or "redis" in text
+        if dependency is None and not text_match:
             return None
+        evidence = []
+        if dependency is not None:
+            evidence.append(DiagnosticEvidence("Обнаружен шаг проверки зависимости", 0.35, dependency))
+        if text_match:
+            evidence.append(DiagnosticEvidence("Обнаружен текстовый connection-сигнал", 0.60, None))
         return DiagnosticFinding(
-            area="Infrastructure/network",
-            title="Connection-related signal detected",
-            explanation="Runtime signals contain connection-related wording.",
-            confidence=0.6,
-            facts=["connection-related signal detected"],
+            area="Инфраструктура/сеть",
+            title="Обнаружен connection-сигнал",
+            explanation="Runtime-сигналы содержат connection-related wording.",
+            confidence=confidence_from(evidence),
+            facts=["обнаружен connection-сигнал"],
             assumptions=[
-                "service unavailable",
-                "network issue",
+                "зависимый сервис недоступен",
+                "возможна сетевая проблема",
             ],
             recommended_checks=[
-                "verify dependency health",
-                "check DNS/proxy/TLS configuration",
-                "retry direct request outside the test runner",
+                "проверить health и доступность зависимости",
+                "проверить DNS/proxy/TLS конфигурацию",
+                "повторить прямой запрос вне test runner",
             ],
+            evidence=evidence,
             rule_name=self.name,
         )
 
@@ -65,4 +81,3 @@ def _combined_text(signals: list[DiagnosticSignal]) -> str:
             signal_text(signals, "step_error"),
         ]
     )
-

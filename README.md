@@ -19,7 +19,7 @@ py -m pytest
 ожидаемый результат здесь:
 
 ```text
-17 passed
+29 passed
 ```
 
 Это проверка самой библиотеки, а не демонстрация падений.
@@ -53,25 +53,29 @@ AssertionError
 ```text
 ==================== PYTEST DIAGNOSTICS ====================
 
-Known facts:
-- HTTP status 500 detected
+Известные факты:
+- обнаружен HTTP статус 500
 
-Most probable area:
+Наиболее вероятная область:
 API/backend
 
-Confidence:
+Уверенность:
 0.72
 
-Possible causes:
-- service returned an internal error
-- backend dependency may be unhealthy
+Доказательная база:
+- Обнаружен HTTP статус 500 (+0.65)
+- Обнаружен шаг API-запроса (+0.07)
 
-Recommended checks:
-- inspect backend logs
-- check upstream dependencies
-- verify request payload and response body
+Возможные причины:
+- сервис вернул внутреннюю ошибку
+- backend-зависимость может быть недоступна или нестабильна
 
-Raw signals:
+Рекомендуемые проверки:
+- проверить backend-логи
+- проверить upstream-зависимости
+- проверить payload запроса и тело ответа
+
+Сырые сигналы:
 - failure_phase=call from pytest
 - exception_type=AssertionError from pytest
 - http_status=500 from allure_step
@@ -95,7 +99,8 @@ pytest runtime
 * `pytest_diagnostics.collectors` - пассивные сборщики runtime-сигналов.
 * `pytest_diagnostics.signals` - нормализация runtime context в `DiagnosticSignal[]`.
 * `pytest_diagnostics.engine` - matcher, который прогоняет signals через rules.
-* `pytest_diagnostics.diagnostics` - `DiagnosticFinding`, `DiagnosticSummary`, formatter.
+* `pytest_diagnostics.diagnostics` - `DiagnosticFinding`, `DiagnosticEvidence`, `DiagnosticSummary`, formatter.
+* `pytest_diagnostics.steps` - semantic analysis и базовая `StepSequence`.
 * `pytest_diagnostics.integrations.allure_steps` - безопасная обертка `allure.step()`.
 * `pytest_diagnostics.rules` - pluggable rule engine и встроенные правила.
 * `pytest_diagnostics.output` - markdown-резюме и Allure attachments.

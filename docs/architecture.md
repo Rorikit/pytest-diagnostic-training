@@ -58,6 +58,10 @@ DiagnosticSignal(type="http_status", value=500, source="allure_step")
 DiagnosticSignal(type="allure_step", value="API POST /orders вернул HTTP 500", source="allure")
 ```
 
+`pytest_diagnostics/steps` добавляет semantic intelligence для названий
+`allure.step`: `step_kind`, `endpoint`, `http_method`, `resource`, `domain`,
+`role`, `data_entity`, `compared_sources`.
+
 ### Rule layer
 
 `pytest_diagnostics/rules` содержит независимые правила. Правило получает только
@@ -83,6 +87,7 @@ DiagnosticSignal(type="allure_step", value="API POST /orders вернул HTTP 5
 `pytest_diagnostics/diagnostics` содержит:
 
 * `DiagnosticFinding`
+* `DiagnosticEvidence`
 * `DiagnosticSummary`
 * `TextDiagnosticFormatter`
 
@@ -90,6 +95,22 @@ DiagnosticSignal(type="allure_step", value="API POST /orders вернул HTTP 5
 
 * `facts` - что реально известно из сигналов;
 * `assumptions` - вероятные причины.
+
+`DiagnosticEvidence` объясняет, из каких сигналов сложилась уверенность
+finding. Confidence считается как сумма весов evidence с ограничением `0..1`.
+
+## Последовательность шагов
+
+`StepSequenceBuilder` строит упорядоченную последовательность шагов:
+
+```text
+1. auth: Логин под admin-сессией - passed
+2. api_request: GET /redfish/v1/Chassis - passed
+3. ui: Получение Members из Web UI - passed
+4. comparison: Сравнение API Members и UI Members - failed
+```
+
+Это не полноценный dependency graph, но основа для будущего causal analysis.
 
 ### Allure output
 

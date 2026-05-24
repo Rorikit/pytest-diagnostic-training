@@ -4,7 +4,8 @@ from functools import wraps
 from typing import Any, Callable
 
 from pytest_diagnostics.core.context import get_current_context
-from pytest_diagnostics.core.models import DiagnosticFact, DiagnosticSignal, NetworkEvent, SignalSeverity
+from pytest_diagnostics.core.models import DiagnosticFact, NetworkEvent
+from pytest_diagnostics.signals.models import DiagnosticSignal
 from pytest_diagnostics.utils.time import elapsed_ms, now_epoch, now_monotonic
 
 
@@ -89,12 +90,11 @@ class RequestsInstrumentation:
         if error or (status_code is not None and status_code >= 400):
             context.add_signal(
                 DiagnosticSignal(
-                    kind="network.http_error",
+                    type="http_error",
+                    value=status_code if error is None else error,
                     source="requests",
-                    message=error or f"{event.method} {event.url} вернул HTTP {status_code}",
-                    severity=SignalSeverity.ERROR if error or status_code >= 500 else SignalSeverity.WARNING,
-                    timestamp=now_epoch(),
-                    data={
+                    severity="error" if error or status_code >= 500 else "warning",
+                    metadata={
                         "library": "requests",
                         "method": event.method,
                         "url": event.url,

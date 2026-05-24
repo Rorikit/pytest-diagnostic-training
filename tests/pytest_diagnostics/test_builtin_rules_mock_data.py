@@ -12,9 +12,21 @@ def analyze(signals: list[DiagnosticSignal]):
 def test_missing_field_rule_matches_key_error():
     finding = analyze([DiagnosticSignal(type="exception_type", value="KeyError", source="pytest")])
 
-    assert finding.area == "Data/schema"
-    assert finding.confidence == 0.65
-    assert "expected field is missing" in finding.assumptions
+    assert finding.area == "Данные/схема"
+    assert finding.confidence == 0.55
+    assert "ожидаемое поле отсутствует" in finding.assumptions
+
+
+def test_missing_field_rule_confidence_grows_in_api_request_context():
+    finding = analyze(
+        [
+            DiagnosticSignal(type="exception_type", value="KeyError", source="pytest"),
+            DiagnosticSignal(type="step_kind", value="api_request", source="step_semantics"),
+        ]
+    )
+
+    assert finding.area == "Данные/схема"
+    assert finding.confidence == 0.7
 
 
 def test_unauthorized_rule_matches_401_message():
@@ -22,8 +34,15 @@ def test_unauthorized_rule_matches_401_message():
         [DiagnosticSignal(type="exception_message", value="GET /me returned 401 Unauthorized", source="pytest")]
     )
 
-    assert finding.area == "Auth"
-    assert finding.confidence == 0.75
+    assert finding.area == "Аутентификация"
+    assert finding.confidence == 0.4
+
+
+def test_unauthorized_rule_prefers_http_status_signal():
+    finding = analyze([DiagnosticSignal(type="http_status", value=401, source="step_semantics")])
+
+    assert finding.area == "Аутентификация"
+    assert finding.confidence == 0.65
 
 
 def test_forbidden_rule_matches_insufficient_permissions():
@@ -37,14 +56,21 @@ def test_forbidden_rule_matches_insufficient_permissions():
         ]
     )
 
-    assert finding.area == "Permissions"
-    assert finding.confidence == 0.75
+    assert finding.area == "Права доступа"
+    assert finding.confidence == 0.4
+
+
+def test_forbidden_rule_prefers_http_status_signal():
+    finding = analyze([DiagnosticSignal(type="http_status", value=403, source="step_semantics")])
+
+    assert finding.area == "Права доступа"
+    assert finding.confidence == 0.65
 
 
 def test_timeout_rule_matches_timeout_signal():
     finding = analyze([DiagnosticSignal(type="exception_message", value="operation timed out", source="pytest")])
 
-    assert finding.area == "Timeout/service availability"
+    assert finding.area == "Timeout/доступность сервиса"
     assert finding.confidence == 0.6
 
 
@@ -59,7 +85,7 @@ def test_connection_rule_matches_mock_redis_connection_failure():
         ]
     )
 
-    assert finding.area == "Infrastructure/network"
+    assert finding.area == "Инфраструктура/сеть"
     assert finding.confidence == 0.6
 
 
@@ -67,4 +93,4 @@ def test_server_error_rule_matches_http_status_signal():
     finding = analyze([DiagnosticSignal(type="http_status", value=500, source="allure_step")])
 
     assert finding.area == "API/backend"
-    assert finding.confidence == 0.72
+    assert finding.confidence == 0.65

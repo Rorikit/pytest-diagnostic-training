@@ -29,7 +29,7 @@ testpaths = tests
 Поэтому запускаются только unit-тесты библиотеки. Нормальный результат:
 
 ```text
-17 passed
+29 passed
 ```
 
 ### Демонстрация диагностики
@@ -105,20 +105,24 @@ with allure.step("Сравнение API Members и UI Members"):
 * стартовал allure.step: API POST /orders вернул HTTP 500
 * allure.step 'API POST /orders вернул HTTP 500' завершился со статусом ошибка
 
-Most probable area:
+Наиболее вероятная область:
 API/backend
 
-Confidence:
+Уверенность:
 0.72
 
-Possible causes:
-- service returned an internal error
-- backend dependency may be unhealthy
+Доказательная база:
+- Обнаружен HTTP статус 500 (+0.65)
+- Обнаружен шаг API-запроса (+0.07)
 
-Recommended checks:
-- inspect backend logs
-- check upstream dependencies
-- verify request payload and response body
+Возможные причины:
+- сервис вернул внутреннюю ошибку
+- backend-зависимость может быть недоступна или нестабильна
+
+Рекомендуемые проверки:
+- проверить backend-логи
+- проверить upstream-зависимости
+- проверить payload запроса и тело ответа
 ```
 
 ## Ограничения MVP

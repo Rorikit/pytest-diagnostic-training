@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from pytest_diagnostics.collectors.base import RuntimeCollector
-from pytest_diagnostics.core.models import DiagnosticSignal, SignalSeverity
+from pytest_diagnostics.signals.models import DiagnosticSignal
 from pytest_diagnostics.utils.time import now_epoch
 from pytest_diagnostics.utils.traceback import compact_traceback
 
@@ -17,13 +17,10 @@ class TracebackCollector(RuntimeCollector):
         )
         context.add_signal(
             DiagnosticSignal(
-                kind="exception.traceback",
+                type="traceback",
+                value=compact or str(report.longrepr),
                 source=self.name,
-                message=compact or str(report.longrepr),
-                severity=SignalSeverity.ERROR,
-                phase=report.when,
-                timestamp=now_epoch(),
-                data={"exception_type": call.excinfo.typename},
+                severity="error",
+                metadata={"exception_type": call.excinfo.typename, "phase": report.when},
             )
         )
-

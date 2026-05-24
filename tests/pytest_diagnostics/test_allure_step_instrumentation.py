@@ -6,7 +6,7 @@ from pytest_diagnostics.core.models import RuntimeException, RuntimeStep, TestDi
 from pytest_diagnostics.engine.matcher import DiagnosticMatcher
 from pytest_diagnostics.rules import default_rules
 from pytest_diagnostics.signals.collectors import ContextSignalCollector
-from pytest_diagnostics.integrations.allure_steps import StepSemanticExtractor
+from pytest_diagnostics.steps.semantics import StepSemanticAnalyzer
 
 
 def test_allure_step_wrapper_records_failed_step_and_semantic_tags():
@@ -22,8 +22,8 @@ def test_allure_step_wrapper_records_failed_step_and_semantic_tags():
 
     assert context.steps[0].title == "Сравнение API Members и UI Members"
     assert context.steps[0].status == "failed"
-    assert set(context.steps[0].tags) >= {"api", "ui", "compare"}
-    assert any(signal.kind == "allure.step_failed" for signal in context.signals)
+    assert set(context.steps[0].tags) >= {"api", "ui", "comparison"}
+    assert any(signal.type == "allure_step_failed" for signal in context.signals)
 
 
 def test_allure_step_rule_prioritizes_api_ui_correlation():
@@ -49,7 +49,7 @@ def test_allure_step_rule_prioritizes_api_ui_correlation():
     result = DiagnosticMatcher(default_rules()).match(signals)
 
     assert result.top_finding is not None
-    assert result.top_finding.area == "Data comparison"
+    assert result.top_finding.area == "Сравнение данных"
     assert result.top_finding.rule_name == "assertion_mismatch"
 
 
@@ -69,7 +69,7 @@ def test_allure_step_rule_uses_timeout_tag_before_ui_tag():
     result = DiagnosticMatcher(default_rules()).match(signals)
 
     assert result.top_finding is not None
-    assert result.top_finding.area == "Timeout/service availability"
+    assert result.top_finding.area == "Timeout/доступность сервиса"
 
 
 def test_allure_step_rule_uses_dependency_tag():
@@ -88,11 +88,11 @@ def test_allure_step_rule_uses_dependency_tag():
     result = DiagnosticMatcher(default_rules()).match(signals)
 
     assert result.top_finding is not None
-    assert result.top_finding.area == "Infrastructure/network"
+    assert result.top_finding.area == "Инфраструктура/сеть"
 
 
 def test_step_semantics_do_not_treat_redis_port_as_http_status():
-    semantic = StepSemanticExtractor().extract("Проверка Redis mock dependency: redis://localhost:6379 недоступен")
+    semantic = StepSemanticAnalyzer().analyze("Проверка Redis mock dependency: redis://localhost:6379 недоступен")
 
-    assert semantic.http_status is None
+    assert "http_status" not in semantic.metadata
     assert "dependency" in semantic.tags

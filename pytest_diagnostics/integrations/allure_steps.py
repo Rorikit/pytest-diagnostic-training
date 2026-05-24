@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import re
 from dataclasses import dataclass, field
 from functools import wraps
 from typing import Any, Callable
@@ -8,10 +7,10 @@ from typing import Any, Callable
 from pytest_diagnostics.core.context import get_current_context
 from pytest_diagnostics.core.models import (
     DiagnosticFact,
-    DiagnosticSignal,
     RuntimeStep,
-    SignalSeverity,
 )
+from pytest_diagnostics.signals.models import DiagnosticSignal
+from pytest_diagnostics.steps.semantics import StepSemanticAnalyzer
 from pytest_diagnostics.utils.time import elapsed_ms, now_epoch, now_monotonic
 
 
@@ -23,32 +22,17 @@ class StepSemantic:
     confidence_hint: float = 0.0
 
 
-class StepSemanticExtractor:
-    _tag_patterns = (
-        ("auth", re.compile(r"\b(login|auth|token|session|401|403|роль|права|сесс)", re.I)),
-        ("api", re.compile(r"\b(api|http|request|response|endpoint|GET|POST|PUT|PATCH|DELETE|redfish)\b", re.I)),
-        ("ui", re.compile(r"\b(ui|web|page|browser|frontend|форма|страниц|интерфейс)\b", re.I)),
-        ("compare", re.compile(r"\b(compare|assert|equal|match|сравн|ожидаем)", re.I)),
-        ("timeout", re.compile(r"\b(timeout|timed out|wait|ожидан|таймаут)\b", re.I)),
-        ("dependency", re.compile(r"\b(dependency|service|broker|queue|db|redis|kafka|connect|соедин|зависим)", re.I)),
-        ("cache", re.compile(r"\b(cache|кэш|stale|устар)", re.I)),
-    )
-    _status_pattern = re.compile(
-        r"(?:HTTP\s*|status(?:_code)?\D+|вернул\D+)(?P<status>[1-5]\d\d)\b",
-        re.I,
-    )
-    _endpoint_pattern = re.compile(r"\b(?:GET|POST|PUT|PATCH|DELETE)\s+(?P<endpoint>/[^\s]+)", re.I)
+class AllureStepSemanticAdapter:
+    def __init__(self, analyzer: StepSemanticAnalyzer | None = None) -> None:
+        self._analyzer = analyzer or StepSemanticAnalyzer()
 
     def extract(self, title: str) -> StepSemantic:
-        tags = tuple(tag for tag, pattern in self._tag_patterns if pattern.search(title))
-        status_match = self._status_pattern.search(title)
-        endpoint_match = self._endpoint_pattern.search(title)
-        confidence_hint = min(0.25, len(tags) * 0.04)
+        info = self._analyzer.analyze(title)
         return StepSemantic(
-            tags=tags,
-            http_status=int(status_match.group("status")) if status_match else None,
-            endpoint=endpoint_match.group("endpoint") if endpoint_match else None,
-            confidence_hint=confidence_hint,
+            tags=info.tags,
+            http_status=info.metadata.get("http_status"),
+            endpoint=info.metadata.get("endpoint"),
+            confidence_hint=min(0.25, len(info.tags) * 0.04),
         )
 
 
@@ -67,7 +51,7 @@ class AllureStepInstrumentation:
     _original_step: Callable[..., Any] | None = None
 
     def __init__(self) -> None:
-        self._extractor = StepSemanticExtractor()
+        self._semantic_adapter = AllureStepSemanticAdapter()
 
     def install(self) -> None:
         if self.__class__._installed:
@@ -83,7 +67,7 @@ class AllureStepInstrumentation:
         @wraps(original_step)
         def observed_step(title):
             original_context = original_step(title)
-            semantic = self._extractor.extract(str(title))
+            semantic = self._semantic_adapter.extract(str(title))
             return _StepContextProxy(str(title), original_context, semantic, original_step)
 
         allure.step = observed_step
@@ -157,12 +141,10 @@ class _StepContextProxy:
             )
             context.add_signal(
                 DiagnosticSignal(
-                    kind="allure.step",
+                    type="allure_step_started",
+                    value=self.title,
                     source="allure",
-                    message=self.title,
-                    severity=SignalSeverity.INFO,
-                    timestamp=observed.started_epoch,
-                    data={
+                    metadata={
                         "title": self.title,
                         "tags": self.semantic.tags,
                         "http_status": self.semantic.http_status,
@@ -216,12 +198,11 @@ class _StepContextProxy:
         if error is not None:
             context.add_signal(
                 DiagnosticSignal(
-                    kind="allure.step_failed",
+                    type="allure_step_failed",
+                    value=step.title,
                     source="allure",
-                    message=step.title,
-                    severity=SignalSeverity.ERROR,
-                    timestamp=step.finished_at,
-                    data={
+                    severity="error",
+                    metadata={
                         "title": step.title,
                         "tags": step.tags,
                         "error": error,

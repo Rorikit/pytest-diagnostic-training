@@ -5,6 +5,7 @@ from typing import Any
 
 from pytest_diagnostics.core.models import TestDiagnosticContext
 from pytest_diagnostics.signals.models import DiagnosticSignal
+from pytest_diagnostics.steps.semantics import StepSemanticAnalyzer
 
 
 class PytestReportSignalCollector:
@@ -35,6 +36,9 @@ class PytestReportSignalCollector:
 
 class ContextSignalCollector:
     """Converts collected runtime context into rule-engine signals."""
+
+    def __init__(self, step_analyzer: StepSemanticAnalyzer | None = None) -> None:
+        self._step_analyzer = step_analyzer or StepSemanticAnalyzer()
 
     def collect(self, context: TestDiagnosticContext) -> list[DiagnosticSignal]:
         signals: list[DiagnosticSignal] = []
@@ -69,6 +73,7 @@ class ContextSignalCollector:
             )
             signals.extend(_http_status_signals(exception.message, source="pytest/message"))
         for step in context.steps:
+            semantic = self._step_analyzer.analyze(step.title)
             signals.append(
                 DiagnosticSignal(
                     type="allure_step",
@@ -98,6 +103,7 @@ class ContextSignalCollector:
                         severity="error",
                     )
                 )
+            signals.extend(semantic.to_signals())
             http_status = step.metadata.get("http_status")
             if http_status is not None:
                 signals.append(
@@ -157,4 +163,3 @@ def _deduplicate(signals: list[DiagnosticSignal]) -> list[DiagnosticSignal]:
         seen.add(key)
         result.append(signal)
     return result
-

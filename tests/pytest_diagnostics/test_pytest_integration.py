@@ -39,6 +39,6 @@ def test_lifecycle_builds_signal_based_summary_from_pytest_report():
 
     assert writer.summary_model is not None
     assert writer.summary_model.top_finding is not None
-    assert writer.summary_model.top_finding.area == "Data comparison"
+    assert writer.summary_model.top_finding.area == "Сравнение данных"
     assert "PYTEST DIAGNOSTICS" in summary
     assert "exception_type=AssertionError from pytest" in summary

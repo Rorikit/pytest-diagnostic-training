@@ -14,6 +14,7 @@ from pytest_diagnostics.engine.matcher import DiagnosticMatcher
 from pytest_diagnostics.output.allure_writer import AllureDiagnosticWriter
 from pytest_diagnostics.rules import default_rules
 from pytest_diagnostics.signals.collectors import ContextSignalCollector
+from pytest_diagnostics.steps.sequence import StepSequenceBuilder
 from pytest_diagnostics.utils.time import now_epoch
 
 
@@ -39,6 +40,7 @@ class DiagnosticRuntime:
         self.store = store or SignalStore()
         self.writer = writer or AllureDiagnosticWriter()
         self.signal_collector = ContextSignalCollector()
+        self.step_sequence_builder = StepSequenceBuilder()
 
     def configure(self, config) -> None:
         for collector in self.collectors:
@@ -69,7 +71,8 @@ class DiagnosticRuntime:
             collector.after_report(context, report, call)
         if report.failed:
             signals = self.signal_collector.collect(context)
-            diagnostic_summary = self.matcher.match(signals)
+            step_sequence = self.step_sequence_builder.build(context)
+            diagnostic_summary = self.matcher.match(signals, step_sequence=step_sequence)
             return self.writer.write(diagnostic_summary)
         return None
 

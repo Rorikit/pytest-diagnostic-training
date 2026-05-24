@@ -4,6 +4,8 @@ from dataclasses import dataclass, field
 from enum import Enum
 from typing import Any, ClassVar, Mapping
 
+from pytest_diagnostics.signals.models import DiagnosticSignal
+
 
 class DiagnosticPhase(str, Enum):
     SETUP = "setup"
@@ -28,19 +30,6 @@ class DiagnosticFact:
     phase: str = DiagnosticPhase.UNKNOWN.value
     timestamp: float | None = None
     metadata: Mapping[str, Any] = field(default_factory=dict)
-
-
-@dataclass(slots=True, frozen=True)
-class DiagnosticSignal:
-    """Normalized event emitted by collectors for later analysis."""
-
-    kind: str
-    source: str
-    message: str
-    severity: SignalSeverity = SignalSeverity.INFO
-    phase: str = DiagnosticPhase.UNKNOWN.value
-    timestamp: float | None = None
-    data: Mapping[str, Any] = field(default_factory=dict)
 
 
 @dataclass(slots=True)
