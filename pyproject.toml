@@ -1,0 +1,20 @@
+[project]
+name = "pytest-diagnostic-training"
+version = "0.1.0"
+description = "Диагностический слой для pytest и Allure"
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = [
+    "allure-pytest>=2.16.0",
+    "httpx>=0.28.1",
+    "pytest>=9.0.3",
+    "requests>=2.34.2",
+]
+
+[project.entry-points.pytest11]
+pytest-diagnostics = "pytest_diagnostics.plugin"
+
+[dependency-groups]
+dev = [
+    "ruff>=0.15.14",
+]
