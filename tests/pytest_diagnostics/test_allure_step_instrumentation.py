@@ -2,9 +2,11 @@ import allure
 import pytest
 
 from pytest_diagnostics.core.context import set_current_context
-from pytest_diagnostics.core.models import RuntimeStep, TestDiagnosticContext
-from pytest_diagnostics.rules.builtin import default_rules
-from pytest_diagnostics.rules.engine import RuleEngine
+from pytest_diagnostics.core.models import RuntimeException, RuntimeStep, TestDiagnosticContext
+from pytest_diagnostics.engine.matcher import DiagnosticMatcher
+from pytest_diagnostics.rules import default_rules
+from pytest_diagnostics.signals.collectors import ContextSignalCollector
+from pytest_diagnostics.integrations.allure_steps import StepSemanticExtractor
 
 
 def test_allure_step_wrapper_records_failed_step_and_semantic_tags():
@@ -26,6 +28,9 @@ def test_allure_step_wrapper_records_failed_step_and_semantic_tags():
 
 def test_allure_step_rule_prioritizes_api_ui_correlation():
     context = TestDiagnosticContext(nodeid="tests/test_steps.py::test_case", started_at=0)
+    context.exceptions.append(
+        RuntimeException(exc_type="AssertionError", message="assert api_members == ui_members", phase="call")
+    )
     context.steps.extend(
         [
             RuntimeStep(title="GET /redfish/v1/Chassis", status="passed", started_at=0, tags=("api",)),
@@ -40,11 +45,12 @@ def test_allure_step_rule_prioritizes_api_ui_correlation():
         ]
     )
 
-    result = RuleEngine(default_rules()).analyze(context)
+    signals = ContextSignalCollector().collect(context)
+    result = DiagnosticMatcher(default_rules()).match(signals)
 
-    assert result.primary_hypothesis is not None
-    assert result.primary_hypothesis.area == "Синхронизация данных между API и UI"
-    assert result.primary_hypothesis.rule_id == "builtin.allure_step_correlation"
+    assert result.top_finding is not None
+    assert result.top_finding.area == "Data comparison"
+    assert result.top_finding.rule_name == "assertion_mismatch"
 
 
 def test_allure_step_rule_uses_timeout_tag_before_ui_tag():
@@ -59,10 +65,11 @@ def test_allure_step_rule_uses_timeout_tag_before_ui_tag():
         )
     )
 
-    result = RuleEngine(default_rules()).analyze(context)
+    signals = ContextSignalCollector().collect(context)
+    result = DiagnosticMatcher(default_rules()).match(signals)
 
-    assert result.primary_hypothesis is not None
-    assert result.primary_hypothesis.area == "Timeout в шаге теста"
+    assert result.top_finding is not None
+    assert result.top_finding.area == "Timeout/service availability"
 
 
 def test_allure_step_rule_uses_dependency_tag():
@@ -77,7 +84,15 @@ def test_allure_step_rule_uses_dependency_tag():
         )
     )
 
-    result = RuleEngine(default_rules()).analyze(context)
+    signals = ContextSignalCollector().collect(context)
+    result = DiagnosticMatcher(default_rules()).match(signals)
 
-    assert result.primary_hypothesis is not None
-    assert result.primary_hypothesis.area == "Внешняя зависимость или сетевой транспорт"
+    assert result.top_finding is not None
+    assert result.top_finding.area == "Infrastructure/network"
+
+
+def test_step_semantics_do_not_treat_redis_port_as_http_status():
+    semantic = StepSemanticExtractor().extract("Проверка Redis mock dependency: redis://localhost:6379 недоступен")
+
+    assert semantic.http_status is None
+    assert "dependency" in semantic.tags

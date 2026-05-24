@@ -10,9 +10,10 @@ from pytest_diagnostics.collectors.traceback_collector import TracebackCollector
 from pytest_diagnostics.core.context import set_current_context
 from pytest_diagnostics.core.models import TestDiagnosticContext
 from pytest_diagnostics.core.signal_store import SignalStore
+from pytest_diagnostics.engine.matcher import DiagnosticMatcher
 from pytest_diagnostics.output.allure_writer import AllureDiagnosticWriter
-from pytest_diagnostics.rules.builtin import default_rules
-from pytest_diagnostics.rules.engine import RuleEngine
+from pytest_diagnostics.rules import default_rules
+from pytest_diagnostics.signals.collectors import ContextSignalCollector
 from pytest_diagnostics.utils.time import now_epoch
 
 
@@ -22,7 +23,7 @@ class DiagnosticRuntime:
     def __init__(
         self,
         collectors: list[RuntimeCollector] | None = None,
-        rule_engine: RuleEngine | None = None,
+        matcher: DiagnosticMatcher | None = None,
         store: SignalStore | None = None,
         writer: AllureDiagnosticWriter | None = None,
     ) -> None:
@@ -34,9 +35,10 @@ class DiagnosticRuntime:
             HttpxCollector(),
             AllureCollector(),
         ]
-        self.rule_engine = rule_engine or RuleEngine(default_rules())
+        self.matcher = matcher or DiagnosticMatcher(default_rules())
         self.store = store or SignalStore()
         self.writer = writer or AllureDiagnosticWriter()
+        self.signal_collector = ContextSignalCollector()
 
     def configure(self, config) -> None:
         for collector in self.collectors:
@@ -66,8 +68,9 @@ class DiagnosticRuntime:
         for collector in self.collectors:
             collector.after_report(context, report, call)
         if report.failed:
-            result = self.rule_engine.analyze(context)
-            return self.writer.write(result)
+            signals = self.signal_collector.collect(context)
+            diagnostic_summary = self.matcher.match(signals)
+            return self.writer.write(diagnostic_summary)
         return None
 
     def finish_test(self, item) -> None:
@@ -88,4 +91,3 @@ class DiagnosticRuntime:
 
     def _context_for(self, item) -> TestDiagnosticContext | None:
         return self.store.get(item.nodeid)
-

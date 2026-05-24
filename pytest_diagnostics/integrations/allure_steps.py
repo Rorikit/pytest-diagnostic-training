@@ -28,12 +28,15 @@ class StepSemanticExtractor:
         ("auth", re.compile(r"\b(login|auth|token|session|401|403|роль|права|сесс)", re.I)),
         ("api", re.compile(r"\b(api|http|request|response|endpoint|GET|POST|PUT|PATCH|DELETE|redfish)\b", re.I)),
         ("ui", re.compile(r"\b(ui|web|page|browser|frontend|форма|страниц|интерфейс)\b", re.I)),
-        ("compare", re.compile(r"\b(compare|assert|equal|match|сравн|провер|ожидаем)", re.I)),
+        ("compare", re.compile(r"\b(compare|assert|equal|match|сравн|ожидаем)", re.I)),
         ("timeout", re.compile(r"\b(timeout|timed out|wait|ожидан|таймаут)\b", re.I)),
         ("dependency", re.compile(r"\b(dependency|service|broker|queue|db|redis|kafka|connect|соедин|зависим)", re.I)),
         ("cache", re.compile(r"\b(cache|кэш|stale|устар)", re.I)),
     )
-    _status_pattern = re.compile(r"(?:HTTP\s*)?(?P<status>[1-5]\d\d)")
+    _status_pattern = re.compile(
+        r"(?:HTTP\s*|status(?:_code)?\D+|вернул\D+)(?P<status>[1-5]\d\d)\b",
+        re.I,
+    )
     _endpoint_pattern = re.compile(r"\b(?:GET|POST|PUT|PATCH|DELETE)\s+(?P<endpoint>/[^\s]+)", re.I)
 
     def extract(self, title: str) -> StepSemantic:

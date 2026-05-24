@@ -1,49 +1,28 @@
-from pytest_diagnostics.core.models import (
-    DiagnosticFact,
-    NetworkEvent,
-    RuntimeException,
-    RuntimeReport,
-    TestDiagnosticContext,
-)
-from pytest_diagnostics.rules.builtin import default_rules
-from pytest_diagnostics.rules.engine import RuleEngine
+from pytest_diagnostics.engine.matcher import DiagnosticMatcher
+from pytest_diagnostics.rules import default_rules
+from pytest_diagnostics.signals.models import DiagnosticSignal
 
 
-def test_http_status_rule_prioritizes_auth_failures():
-    context = TestDiagnosticContext(nodeid="tests/test_api.py::test_auth", started_at=0)
-    context.reports.append(RuntimeReport(phase="call", outcome="failed"))
-    context.network_events.append(
-        NetworkEvent(
-            library="requests",
-            method="GET",
-            url="https://example.test/secure",
-            status_code=403,
-            elapsed_ms=12.0,
-        )
-    )
+def test_matcher_sorts_findings_by_confidence():
+    signals = [
+        DiagnosticSignal(type="exception_type", value="AssertionError", source="pytest"),
+        DiagnosticSignal(type="exception_message", value="request returned 403 Forbidden", source="pytest"),
+    ]
 
-    result = RuleEngine(default_rules()).analyze(context)
+    summary = DiagnosticMatcher(default_rules()).match(signals)
 
-    assert result.primary_hypothesis is not None
-    assert result.primary_hypothesis.area == "Аутентификация или авторизация"
-    assert result.primary_hypothesis.confidence == 0.8
+    assert summary.top_finding is not None
+    assert summary.top_finding.area == "Permissions"
+    assert summary.top_finding.confidence == 0.75
+    assert summary.findings[-1].area == "Data comparison"
 
 
-def test_assertion_rule_separates_fact_from_hypothesis():
-    context = TestDiagnosticContext(nodeid="tests/test_ui.py::test_members", started_at=0)
-    context.reports.append(RuntimeReport(phase="call", outcome="failed"))
-    context.exceptions.append(
-        RuntimeException(
-            exc_type="AssertionError",
-            message="assert api_members == ui_members",
-            phase="call",
-        )
-    )
-    context.facts.append(DiagnosticFact(name="pytest.exception", value="AssertionError", source="pytest"))
+def test_assertion_rule_separates_facts_from_assumptions():
+    signals = [DiagnosticSignal(type="exception_type", value="AssertionError", source="pytest")]
 
-    result = RuleEngine(default_rules()).analyze(context)
+    summary = DiagnosticMatcher(default_rules()).match(signals)
 
-    assert result.facts[0].value == "AssertionError"
-    assert result.primary_hypothesis is not None
-    assert result.primary_hypothesis.area == "Проверка данных или сравнение состояния"
-    assert result.primary_hypothesis.rule_id == "builtin.assertion"
+    assert summary.top_finding is not None
+    assert "test failed with AssertionError" in summary.top_finding.facts
+    assert "actual and expected values are different" in summary.top_finding.assumptions
+

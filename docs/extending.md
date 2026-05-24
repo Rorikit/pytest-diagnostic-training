@@ -1,110 +1,73 @@
 # Расширение
 
-## Новое диагностическое правило
+## Новое правило
 
-Правило наследуется от `DiagnosticRule` и реализует `evaluate`.
+Правило наследуется от `DiagnosticRule` и реализует `match`.
 
 ```python
-from pytest_diagnostics.core.models import DiagnosticHypothesis, TestDiagnosticContext
-from pytest_diagnostics.rules.base import DiagnosticRule, clamp_confidence
+from pytest_diagnostics.diagnostics.models import DiagnosticFinding
+from pytest_diagnostics.rules.base import DiagnosticRule
+from pytest_diagnostics.signals.models import DiagnosticSignal
 
 
-class CacheInvalidationRule(DiagnosticRule):
-    rule_id = "custom.cache_invalidation"
+class CacheSignalRule(DiagnosticRule):
+    name = "cache_signal"
 
-    def evaluate(self, context: TestDiagnosticContext) -> DiagnosticHypothesis | None:
-        has_successful_api = any(
-            event.status_code and event.status_code < 400
-            for event in context.network_events
+    def match(self, signals: list[DiagnosticSignal]) -> DiagnosticFinding | None:
+        has_cache_step = any(
+            signal.type == "allure_step" and "cache" in str(signal.value).lower()
+            for signal in signals
         )
-        has_assertion = any(
-            exc.exc_type == "AssertionError"
-            for exc in context.exceptions
-        )
-
-        if not has_successful_api or not has_assertion:
+        if not has_cache_step:
             return None
 
-        return DiagnosticHypothesis(
-            area="Синхронизация данных / UI cache",
-            confidence=clamp_confidence(0.62),
-            possible_causes=(
-                "UI показывает устаревшие данные",
-                "cache invalidation сработал позже проверки",
-            ),
-            recommended_checks=(
-                "сравнить timestamps API и UI",
-                "проверить cache headers и invalidate-события",
-            ),
-            evidence=("API ответил успешно, но проверка данных упала",),
-            rule_id=self.rule_id,
+        return DiagnosticFinding(
+            area="Cache",
+            title="Cache-related signal detected",
+            explanation="Runtime signals mention cache.",
+            confidence=0.55,
+            facts=["cache-related step detected"],
+            assumptions=["stale data may be involved"],
+            recommended_checks=["inspect cache invalidation and timestamps"],
+            rule_name=self.name,
         )
 ```
 
-## Новый коллектор
+## Регистрация правила
 
-Коллектор наследуется от `RuntimeCollector`.
-
-```python
-from pytest_diagnostics.collectors.base import RuntimeCollector
-from pytest_diagnostics.core.models import DiagnosticFact
-from pytest_diagnostics.utils.time import now_epoch
-
-
-class BrowserCollector(RuntimeCollector):
-    name = "browser"
-
-    def after_report(self, context, report, call) -> None:
-        if report.failed:
-            context.add_fact(
-                DiagnosticFact(
-                    name="browser.page_url",
-                    value="https://example.test/current",
-                    source=self.name,
-                    phase=report.when,
-                    timestamp=now_epoch(),
-                )
-            )
-```
-
-Коллектор должен собирать наблюдения, но не делать выводов. Выводы остаются в
-правилах.
-
-## Диагностика из allure.step
-
-Step-driven диагностика расширяется через semantic tags и правила.
-
-Если нужно добавить новый тип шага, расширьте `StepSemanticExtractor` в
-`pytest_diagnostics/integrations/allure_steps.py` новой regex-записью, а затем
-добавьте правило, которое анализирует `context.steps`.
-
-Пример: если в проекте есть шаги `MQ publish`, можно добавить tag `mq`, а
-правило будет генерировать гипотезу про broker/queue subsystem.
-
-## Композиция runtime
-
-Для enterprise framework можно собрать собственный `DiagnosticRuntime`:
+Для framework-интеграции можно собрать свой runtime:
 
 ```python
 from pytest_diagnostics.core.runtime import DiagnosticRuntime
-from pytest_diagnostics.rules.engine import RuleEngine
-from pytest_diagnostics.rules.builtin import default_rules
+from pytest_diagnostics.engine.matcher import DiagnosticMatcher
+from pytest_diagnostics.rules import default_rules
 
 runtime = DiagnosticRuntime(
-    collectors=[
-        # стандартные и кастомные collectors
-    ],
-    rule_engine=RuleEngine([
-        *default_rules(),
-        CacheInvalidationRule(),
-    ]),
+    matcher=DiagnosticMatcher([*default_rules(), CacheSignalRule()]),
 )
 ```
 
-## Принципы расширения
+## Новый источник сигналов
+
+Если нужно добавить новый runtime source, лучше делать это в два шага:
+
+1. Collector пишет наблюдения в `TestDiagnosticContext`.
+2. Signal collector переводит эти наблюдения в `DiagnosticSignal`.
+
+Правила должны зависеть от сигналов, а не от конкретных pytest/allure объектов.
+
+## Диагностика из allure.step
+
+`pytest_diagnostics/integrations/allure_steps.py` оборачивает публичный
+`allure.step()`. Из названия шага извлекаются semantic tags и HTTP status.
+
+Если нужен новый тип шага, расширьте `StepSemanticExtractor`, а правило пусть
+матчит соответствующие `DiagnosticSignal`.
+
+## Принципы
 
 * Не добавлять test-specific rules.
 * Не читать приватные pytest internals.
-* Не смешивать факты и гипотезы.
-* Не превращать правила в большой классификатор.
-* Каждое правило должно объяснять evidence и confidence.
+* Не смешивать facts и assumptions.
+* Не превращать rules в большой classifier.
+* Каждое правило должно объяснять evidence через facts и confidence.

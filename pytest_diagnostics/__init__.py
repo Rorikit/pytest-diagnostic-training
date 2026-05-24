@@ -1,22 +1,10 @@
-"""Diagnostic intelligence layer for pytest and Allure.
+"""Signal-based diagnostic intelligence layer for pytest and Allure."""
 
-The package observes pytest runtime events and common client libraries,
-turns them into facts/signals, and attaches a diagnostic summary to Allure.
-"""
-
-from pytest_diagnostics.core.models import (
-    DiagnosticFact,
-    DiagnosticHypothesis,
-    DiagnosticResult,
-    DiagnosticSignal,
-    TestDiagnosticContext,
-)
+from pytest_diagnostics.diagnostics.models import DiagnosticFinding, DiagnosticSummary
+from pytest_diagnostics.signals.models import DiagnosticSignal
 
 __all__ = [
-    "DiagnosticFact",
-    "DiagnosticHypothesis",
-    "DiagnosticResult",
+    "DiagnosticFinding",
     "DiagnosticSignal",
-    "TestDiagnosticContext",
+    "DiagnosticSummary",
 ]
-

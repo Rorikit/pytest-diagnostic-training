@@ -2,127 +2,101 @@
 
 ## Назначение
 
-`pytest-diagnostics` — это диагностический intelligence layer для enterprise
-automation frameworks. Он не заменяет Allure, не дублирует отчетность и не
-требует ручного создания диагностических объектов в тестах.
+`pytest-diagnostics` - диагностический слой поверх `pytest` и Allure.
 
-Главная идея: тесты продолжают писать обычным способом через `allure.step(...)`,
-а библиотека пассивно собирает runtime-сигналы из шагов и формирует гипотезы о
-вероятной области проблемы.
+Библиотека не заменяет Allure и не создает новую систему отчетности. Она
+собирает runtime-сигналы, прогоняет их через независимые правила и добавляет
+диагностическое резюме в pytest/Allure output.
 
-## Поток данных
+## Pipeline
 
 ```text
-pytest runtime
--> collectors
--> allure.step wrapper
+pytest / allure / runtime events
 -> TestDiagnosticContext
--> RuleEngine
--> DiagnosticResult
--> MarkdownSummaryBuilder
--> AllureDiagnosticWriter
+-> DiagnosticSignal[]
+-> DiagnosticMatcher
+-> DiagnosticFinding[]
+-> DiagnosticSummary
+-> formatter / Allure writer
 ```
 
 ## Слои
 
-### pytest runtime
+### pytest plugin
 
-Файл `pytest_diagnostics/plugin.py` содержит только безопасные pytest hooks:
+`pytest_diagnostics/plugin.py` содержит только безопасные pytest hooks.
 
-* `pytest_configure`
-* `pytest_runtest_setup`
-* `pytest_runtest_call`
-* `pytest_runtest_makereport`
-* `pytest_runtest_teardown`
-* `pytest_unconfigure`
+Hooks не классифицируют ошибки. Они пересылают lifecycle events в
+`DiagnosticLifecycle`. При необходимости консольного вывода plugin добавляет
+summary через `report.sections.append(("pytest-diagnostics", text))`.
 
-Hooks не содержат бизнес-логики. Они только пересылают lifecycle events в
-`DiagnosticLifecycle`.
+### Runtime collection
 
-### Signal collection layer
+`pytest_diagnostics/collectors` собирает runtime-наблюдения в
+`TestDiagnosticContext`:
 
-Коллекторы находятся в `pytest_diagnostics/collectors`.
+* pytest phase outcome;
+* exceptions;
+* traceback;
+* timing;
+* Allure steps;
+* optional network events.
 
-Их задача — наблюдать и записывать факты/сигналы:
+Коллекторы не делают выводов о причинах.
 
-* `PytestCollector` — outcome фаз, исключения, markers.
-* `TracebackCollector` — traceback-сигналы.
-* `TimingCollector` — длительность фаз и медленные фазы.
-* `RequestsCollector` — HTTP-события `requests`.
-* `HttpxCollector` — HTTP-события `httpx`.
-* `AllureCollector` — включает instrumentation для `allure.step()`.
+### Signal layer
 
-Коллекторы не делают выводов о причинах. Они только фиксируют наблюдения.
+`pytest_diagnostics/signals` переводит runtime context в плоский список
+`DiagnosticSignal`.
 
-### Allure step instrumentation
+Примеры:
 
-`pytest_diagnostics/integrations/allure_steps.py` оборачивает публичный
-`allure.step(title)`.
+```python
+DiagnosticSignal(type="exception_type", value="AssertionError", source="pytest")
+DiagnosticSignal(type="failure_phase", value="call", source="pytest")
+DiagnosticSignal(type="http_status", value=500, source="allure_step")
+DiagnosticSignal(type="allure_step", value="API POST /orders вернул HTTP 500", source="allure")
+```
 
-Обертка сохраняет:
+### Rule layer
 
-* название шага;
-* статус шага: `passed` или `failed`;
-* длительность;
-* exception внутри шага;
-* semantic tags из названия шага: `api`, `ui`, `compare`, `auth`, `timeout`,
-  `dependency`, `cache`;
-* HTTP status и endpoint, если они указаны в названии шага.
+`pytest_diagnostics/rules` содержит независимые правила. Правило получает только
+`list[DiagnosticSignal]` и возвращает `DiagnosticFinding | None`.
 
-Оригинальный Allure step продолжает выполняться. Библиотека только добавляет
-диагностическое наблюдение вокруг него.
+Начальные правила:
 
-### Diagnostic model
+* `AssertionMismatchRule`
+* `MissingFieldRule`
+* `UnauthorizedRule`
+* `ForbiddenRule`
+* `ServerErrorRule`
+* `TimeoutRule`
+* `ConnectionRule`
 
-Модели находятся в `pytest_diagnostics/core/models.py`.
+### Matching engine
 
-Ключевое разделение:
+`pytest_diagnostics/engine/matcher.py` запускает все rules, собирает findings и
+сортирует их по `confidence desc`.
 
-* `DiagnosticFact` — наблюдаемый факт.
-* `DiagnosticSignal` — нормализованный runtime-сигнал.
-* `DiagnosticHypothesis` — предположение правила.
-* `DiagnosticResult` — итог анализа.
-* `TestDiagnosticContext` — per-test runtime context.
-* `RuntimeStep` — runtime-представление `allure.step`.
+### Diagnostics model
 
-Факты отделены от предположений, чтобы диагностика оставалась объяснимой.
+`pytest_diagnostics/diagnostics` содержит:
 
-### Rule engine
+* `DiagnosticFinding`
+* `DiagnosticSummary`
+* `TextDiagnosticFormatter`
 
-`RuleEngine` получает `TestDiagnosticContext` и запускает набор правил.
+`DiagnosticFinding` явно разделяет:
 
-Правило:
-
-* анализирует только доступные факты и сигналы;
-* возвращает `DiagnosticHypothesis` только при наличии оснований;
-* выставляет confidence score;
-* добавляет possible causes, recommended checks и evidence.
-
-Это позволяет расширять диагностику без большого `if/else` классификатора.
+* `facts` - что реально известно из сигналов;
+* `assumptions` - вероятные причины.
 
 ### Allure output
 
-`AllureDiagnosticWriter` прикладывает к Allure:
+`AllureDiagnosticWriter` пишет:
 
-* markdown summary;
-* JSON runtime snapshot.
+* description в Allure Overview;
+* attachment `Диагностическое резюме`;
+* attachment `Runtime-снимок диагностики`.
 
-Allure остается основной системой отчета, а библиотека добавляет диагностический
-контекст поверх существующего отчета.
-
-## Runtime context
-
-Каждый тест получает контекст по ключу `item.nodeid`.
-
-Контекст хранит:
-
-* facts;
-* signals;
-* exceptions;
-* reports;
-* timing;
-* network events;
-* attachments metadata.
-
-Активный контекст доступен через `contextvars`, поэтому инструментирование
-`requests` и `httpx` не требует ручного вызова из тестов.
+Allure остается основной системой отчета.

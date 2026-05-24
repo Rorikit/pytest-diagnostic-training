@@ -2,19 +2,19 @@ from __future__ import annotations
 
 import json
 
-from pytest_diagnostics.core.models import DiagnosticResult
-from pytest_diagnostics.output.summary_builder import MarkdownSummaryBuilder
+from pytest_diagnostics.diagnostics.formatter import TextDiagnosticFormatter
+from pytest_diagnostics.diagnostics.models import DiagnosticSummary
 from pytest_diagnostics.utils.serialization import to_jsonable
 
 
 class AllureDiagnosticWriter:
     def __init__(self, include_snapshot: bool = True, include_description: bool = True) -> None:
-        self._summary_builder = MarkdownSummaryBuilder()
+        self._formatter = TextDiagnosticFormatter()
         self._include_snapshot = include_snapshot
         self._include_description = include_description
 
-    def write(self, result: DiagnosticResult) -> str:
-        summary = self._summary_builder.build(result)
+    def write(self, summary_model: DiagnosticSummary) -> str:
+        summary = self._formatter.format(summary_model)
         try:
             import allure
         except ImportError:
@@ -27,13 +27,13 @@ class AllureDiagnosticWriter:
             allure.attach(
                 summary,
                 name="Диагностическое резюме",
-                attachment_type=self._attachment_type(allure, "MARKDOWN", fallback="TEXT"),
+                attachment_type=self._attachment_type(allure, "TEXT", fallback="TEXT"),
             )
         except Exception:
             return summary
 
         if self._include_snapshot:
-            snapshot = json.dumps(to_jsonable(result), ensure_ascii=False, indent=2)
+            snapshot = json.dumps(to_jsonable(summary_model), ensure_ascii=False, indent=2)
             try:
                 allure.attach(
                     snapshot,

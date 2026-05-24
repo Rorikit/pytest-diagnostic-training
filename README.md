@@ -19,7 +19,7 @@ py -m pytest
 ожидаемый результат здесь:
 
 ```text
-13 passed
+17 passed
 ```
 
 Это проверка самой библиотеки, а не демонстрация падений.
@@ -51,27 +51,30 @@ AssertionError
 Результат с диагностическим слоем:
 
 ```text
-УПАЛ
+==================== PYTEST DIAGNOSTICS ====================
 
-Факты:
-* стартовал allure.step: API GET /redfish/v1/Chassis вернул HTTP 200
-* allure.step 'Сравнение API Members и UI Members' завершился со статусом ошибка
+Known facts:
+- HTTP status 500 detected
 
-Вероятная область проблемы:
-Синхронизация данных между API и UI
+Most probable area:
+API/backend
 
-Уверенность:
-высокая
+Confidence:
+0.72
 
-Возможные причины:
-* UI показывает устаревшие данные
-* API и UI читают данные из разных источников или с разной задержкой
-* расхождение в порядке, фильтрации или нормализации данных
+Possible causes:
+- service returned an internal error
+- backend dependency may be unhealthy
 
-Рекомендуемые проверки:
-* сравнить payload API и состояние UI в момент падения
-* проверить timestamps обновления данных
-* проверить cache invalidation и правила сортировки
+Recommended checks:
+- inspect backend logs
+- check upstream dependencies
+- verify request payload and response body
+
+Raw signals:
+- failure_phase=call from pytest
+- exception_type=AssertionError from pytest
+- http_status=500 from allure_step
 ```
 
 ## Архитектура
@@ -81,7 +84,7 @@ pytest runtime
 -> allure.step wrapper
 -> слой сбора сигналов
 -> диагностическая модель
--> rule engine
+-> matcher/rule engine
 -> Allure summary output
 ```
 
@@ -90,6 +93,9 @@ pytest runtime
 * `pytest_diagnostics.plugin` - тонкая интеграция с безопасными pytest hooks.
 * `pytest_diagnostics.core` - runtime context, lifecycle, signal store, модели.
 * `pytest_diagnostics.collectors` - пассивные сборщики runtime-сигналов.
+* `pytest_diagnostics.signals` - нормализация runtime context в `DiagnosticSignal[]`.
+* `pytest_diagnostics.engine` - matcher, который прогоняет signals через rules.
+* `pytest_diagnostics.diagnostics` - `DiagnosticFinding`, `DiagnosticSummary`, formatter.
 * `pytest_diagnostics.integrations.allure_steps` - безопасная обертка `allure.step()`.
 * `pytest_diagnostics.rules` - pluggable rule engine и встроенные правила.
 * `pytest_diagnostics.output` - markdown-резюме и Allure attachments.
@@ -106,6 +112,12 @@ pytest_plugins = ["pytest_diagnostics.plugin"]
 
 ```bash
 py -m pytest
+```
+
+То же самое через uv:
+
+```bash
+uv run pytest
 ```
 
 Демонстрация падающих сценариев:

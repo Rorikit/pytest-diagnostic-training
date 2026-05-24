@@ -54,7 +54,7 @@ def pytest_runtest_makereport(item, call):
         return
     summary = lifecycle.after_report(item, report, call)
     if summary and item.config.getoption("--diagnostics-append-longrepr"):
-        report.longrepr = f"{report.longrepr}\n\n{summary}"
+        report.sections.append(("pytest-diagnostics", summary))
     if report.when == "teardown":
         lifecycle.finish_test(item)
 

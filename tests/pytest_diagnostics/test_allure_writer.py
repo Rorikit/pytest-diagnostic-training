@@ -1,11 +1,12 @@
 import sys
 from types import SimpleNamespace
 
-from pytest_diagnostics.core.models import DiagnosticResult
+from pytest_diagnostics.diagnostics.models import DiagnosticSummary
 from pytest_diagnostics.output.allure_writer import AllureDiagnosticWriter
+from pytest_diagnostics.signals.models import DiagnosticSignal
 
 
-def test_allure_writer_falls_back_when_markdown_type_is_missing(monkeypatch):
+def test_allure_writer_attaches_signal_summary(monkeypatch):
     attachments = []
     descriptions = []
 
@@ -18,17 +19,14 @@ def test_allure_writer_falls_back_when_markdown_type_is_missing(monkeypatch):
     )
     monkeypatch.setitem(sys.modules, "allure", fake_allure)
 
-    result = DiagnosticResult(
-        nodeid="tests/test_example.py::test_failure",
-        status="failed",
-        facts=(),
-        signals=(),
-        hypotheses=(),
+    summary_model = DiagnosticSummary(
+        findings=[],
+        raw_signals=[DiagnosticSignal(type="exception_type", value="AssertionError", source="pytest")],
     )
 
-    summary = AllureDiagnosticWriter(include_snapshot=True).write(result)
+    summary = AllureDiagnosticWriter(include_snapshot=True).write(summary_model)
 
-    assert "УПАЛ" in summary
+    assert "PYTEST DIAGNOSTICS" in summary
     assert descriptions == [summary]
     assert attachments[0]["name"] == "Диагностическое резюме"
     assert attachments[0]["attachment_type"] == "text/plain"
